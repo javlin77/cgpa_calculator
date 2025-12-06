@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import firebase_admin
-from firebase_admin import credentials, firestore
+import json, os, uuid
+from google.cloud import firestore_v1
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -10,67 +10,54 @@ st.set_page_config(
     layout="wide",
 )
 
-# ---------- FIREBASE INITIALIZATION ----------
-if not firebase_admin._apps:
-    try:
-        firebase_config = {
-            "type": st.secrets["FIREBASE"]["type"],
-            "project_id": st.secrets["FIREBASE"]["project_id"],
-            "private_key_id": st.secrets["FIREBASE"]["private_key_id"],
-            "private_key": st.secrets["FIREBASE"]["private_key"],
-            "client_email": st.secrets["FIREBASE"]["client_email"],
-            "client_id": st.secrets["FIREBASE"]["client_id"],
-            "auth_uri": st.secrets["FIREBASE"]["auth_uri"],
-            "token_uri": st.secrets["FIREBASE"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["FIREBASE"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["FIREBASE"]["client_x509_cert_url"]
-        }
 
-        cred = credentials.Certificate(firebase_config)
-        firebase_admin.initialize_app(cred)
+# ---------- FIRESTORE INITIALIZATION ----------
+# Load Google service account from Streamlit Secrets
+key_dict = st.secrets["GOOGLE"]
 
-    except Exception as e:
-        st.error("❌ Firebase initialization failed.")
-        st.stop()
+# Write JSON file temporarily (required by Firestore client)
+with open("gcp_key.json", "w") as f:
+    json.dump(key_dict, f)
 
-db = firestore.client()
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_key.json"
+
+# Initialize Firestore client
+db = firestore_v1.Client()
 
 # ---------- VISITOR COUNTER ----------
-def increment_visitor_count():
+visitors_ref = db.collection("metrics").document("visitors")
+
+# Count only once per Streamlit session
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
     try:
-        ref = db.collection("metrics").document("visitors")
-        ref.set({"count": firestore.Increment(1)}, merge=True)
+        transaction = db.transaction()
+
+        @firestore_v1.transactional
+        def increment_visitors(transaction, doc_ref):
+            snapshot = doc_ref.get(transaction=transaction)
+            current = snapshot.get("count") if snapshot.exists else 0
+            transaction.set(doc_ref, {"count": current + 1})
+
+        increment_visitors(transaction, visitors_ref)
+
     except Exception as e:
-        st.sidebar.error(f"Firestore write error: {e}")
+        st.sidebar.error(f"❌ Firestore Error: {e}")
+
+# Read visitor count
+try:
+    doc = visitors_ref.get()
+    visitor_count = doc.to_dict().get("count", 0) if doc.exists else 0
+except:
+    visitor_count = 0
 
 
-
-def get_visitor_count():
-    try:
-        ref = db.collection("metrics").document("visitors")
-        doc = ref.get()
-
-        # Auto-create document if missing
-        if not doc.exists:
-            ref.set({"count": 0})
-            return 0
-
-        return doc.to_dict().get("count", 0)
-
-    except:
-        return 0  # Never return N/A
-
-
-# Count only once per session
-if "visited" not in st.session_state:
-    increment_visitor_count()
-    st.session_state["visited"] = True
-
-# Custom CSS for purple Calculate SGPA button
+# ---------- CUSTOM BUTTON CSS ----------
 st.markdown("""
     <style>
         .calc-sgpa button {
-            background-color: #8A2BE2 !important;  /* Purple */
+            background-color: #8A2BE2 !important;
             color: white !important;
             border-radius: 8px !important;
             padding: 0.6rem 1.2rem;
@@ -79,10 +66,13 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+# ---------- HEADER ----------
 st.title("🎓 SGPA & CGPA Calculator")
 st.caption("Accurate CGPA using Σ(Credit × GradePoint) / Σ(Credits) across all semesters.")
 
-# ---------- GRADE SCHEMES ----------
+
+# ---------- GRADE SCHEME ----------
 GRADE_SCHEMES = {
     "10-point (O, A+/E, A, B, C, D, D', F, I)": {
         "O": 10,
@@ -97,72 +87,62 @@ GRADE_SCHEMES = {
     }
 }
 
-# ---------- SIDEBAR SETTINGS ----------
+
+# ---------- SIDEBAR ----------
 st.sidebar.header("Settings ⚙️")
-visitor_count = get_visitor_count()
 st.sidebar.markdown(f"👥 **Total Visitors:** {visitor_count}")
 
-scheme_name = st.sidebar.selectbox(
-    "Select Grade Scheme",
-    list(GRADE_SCHEMES.keys())
-)
+scheme_name = st.sidebar.selectbox("Select Grade Scheme", list(GRADE_SCHEMES.keys()))
 grade_points_map = GRADE_SCHEMES[scheme_name]
 
 st.sidebar.markdown("**Current Grade Scale:**")
-for grade, points in grade_points_map.items():
-    st.sidebar.write(f"- {grade}: {points} points")
+for grade, pts in grade_points_map.items():
+    st.sidebar.write(f"- {grade}: {pts} points")
 
-# Initialize session state for storing semester totals
+
+# Initialize stored SGPA records
 if "records" not in st.session_state:
-    st.session_state["records"] = []    # {"semester": n, "credits": x, "points": y}
+    st.session_state["records"] = []
+
 
 # ---------- TABS ----------
 sgpa_tab, cgpa_tab = st.tabs(["📘 SGPA Calculator", "📚 CGPA Calculator"])
 
-# -------------------------------------------------------------------
-# ------------------------ SGPA TAB ---------------------------------
-# -------------------------------------------------------------------
+
+# ---------- SGPA TAB ----------
 with sgpa_tab:
     st.subheader("📘 Semester SGPA Calculator")
 
     col1, col2 = st.columns(2)
-    with col1:
-        semester = st.number_input("Semester Number", 1, 12, 1)
-    with col2:
-        num_subjects = st.number_input("Number of Subjects", 1, 20, 5)
+    semester = col1.number_input("Semester Number", 1, 12, 1)
+    num_subjects = col2.number_input("Number of Subjects", 1, 20, 5)
 
     st.markdown("### 📝 Enter Subject Details")
 
     subjects_data = []
-
     for i in range(int(num_subjects)):
         c1, c2, c3, c4 = st.columns([3, 1.5, 1.5, 1.5])
 
-        with c1:
-            name = st.text_input(f"Subject {i+1}", key=f"name_{semester}_{i}")
-        with c2:
-            credit = st.number_input(f"Credits {i+1}", 0.0, 10.0, 3.0, key=f"credit_{semester}_{i}")
-        with c3:
-            grade = st.selectbox(f"Grade {i+1}", list(grade_points_map.keys()), key=f"grade_{semester}_{i}")
-        with c4:
-            gp = grade_points_map[grade]
-            st.write(f"GP: **{gp}**")
+        name = c1.text_input(f"Subject {i+1}", key=f"name_{semester}_{i}")
+        credit = c2.number_input(f"Credits {i+1}", 0.0, 10.0, 3.0, key=f"credit_{semester}_{i}")
+        grade = c3.selectbox(f"Grade {i+1}", list(grade_points_map.keys()), key=f"grade_{semester}_{i}")
+        gp = grade_points_map[grade]
+        c4.write(f"GP: **{gp}**")
 
         subjects_data.append({
             "name": name,
             "credit": credit,
             "grade": grade,
             "gp": gp,
-            "total_points": credit * gp,
+            "total_points": credit * gp
         })
 
     st.markdown('<div class="calc-sgpa">', unsafe_allow_html=True)
-    clicked_sgpa = st.button("Calculate SGPA")
+    clicked = st.button("Calculate SGPA")
     st.markdown("</div>", unsafe_allow_html=True)
-    
-    if clicked_sgpa:
-        df = pd.DataFrame(subjects_data)
 
+    if clicked:
+        df = pd.DataFrame(subjects_data)
         total_credits = df["credit"].sum()
         total_points = df["total_points"].sum()
 
@@ -170,76 +150,49 @@ with sgpa_tab:
             st.error("Credits cannot be zero.")
         else:
             sgpa = total_points / total_credits
-
             st.success(f"🎉 SGPA for Semester {semester} = **{sgpa:.2f}**")
+
             st.metric(f"SGPA (Sem {semester})", f"{sgpa:.2f}")
 
-            # -------- REMOVE OLD ENTRY IF SAME SEMESTER -------
+            # Remove previous entry if same semester
             st.session_state["records"] = [
-                r for r in st.session_state["records"] if r["semester"] != semester
+                r for r in st.session_state["records"]
+                if r["semester"] != semester
             ]
 
-            # -------- ADD NEW SEMESTER DATA -------------------
             st.session_state["records"].append({
                 "semester": semester,
                 "credits": float(total_credits),
                 "points": float(total_points)
             })
 
-            # -------- ALWAYS SORT BY SEMESTER ------------------
-            st.session_state["records"] = sorted(
-                st.session_state["records"], key=lambda x: x["semester"]
-            )
 
-            with st.expander("📊 Detailed Table"):
-                st.dataframe(df)
-
-            st.info("Semester saved. You may add more Semester grades or go to the CGPA Calculator tab.")
-
-# -------------------------------------------------------------------
-# ------------------------ CGPA TAB ---------------------------------
-# -------------------------------------------------------------------
+# ---------- CGPA TAB ----------
 with cgpa_tab:
     st.subheader("📚 CGPA Calculator")
 
     if len(st.session_state["records"]) == 0:
-        st.warning("No SGPA data yet. First calculate SGPA for at least one semester.")
+        st.warning("No SGPA data yet. Calculate SGPA first.")
     else:
-        st.markdown("### 📄 Semester Summary")
-
-        df = pd.DataFrame(st.session_state["records"])
-        df = df.sort_values("semester")
+        df = pd.DataFrame(st.session_state["records"]).sort_values("semester")
 
         df_display = df.rename(columns={
             "semester": "Semester",
             "credits": "Total Credits",
             "points": "Σ(C × GP)"
         })
-
         df_display["SGPA"] = df_display["Σ(C × GP)"] / df_display["Total Credits"]
 
         st.dataframe(df_display, use_container_width=True)
 
-        total_credits_all = df["credits"].sum()
-        total_points_all = df["points"].sum()
+        total_credits = df["credits"].sum()
+        total_points = df["points"].sum()
 
-        if total_credits_all == 0:
-            st.error("Cannot compute CGPA because total credits = 0.")
-        else:
-            cgpa = total_points_all / total_credits_all
+        cgpa = total_points / total_credits if total_credits else 0
 
-            st.markdown("---")
-            st.metric(
-                label="🎓 Final CGPA (Exact Formula)",
-                value=f"{cgpa:.2f}",
-                help="CGPA = Σ(Credit × GradePoint) / Σ(Credits) across ALL semesters."
-            )
+        st.metric("🎓 Final CGPA", f"{cgpa:.2f}")
+        st.caption(f"Based on {len(df)} semesters and {total_credits:.0f} credits.")
 
-            st.caption(
-                f"Based on {len(df)} semesters and total **{total_credits_all:.0f} credits**."
-            )
-
-        st.markdown("---")
         if st.button("🗑 Clear All Semesters", type="secondary"):
             st.session_state["records"] = []
             st.success("All data cleared.")
