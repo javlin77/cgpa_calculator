@@ -40,8 +40,9 @@ def increment_visitor_count():
     try:
         ref = db.collection("metrics").document("visitors")
         ref.set({"count": firestore.Increment(1)}, merge=True)
-    except:
-        pass  # Silent fail
+    except Exception as e:
+        st.sidebar.error(f"Firestore write error: {e}")
+
 
 
 def get_visitor_count():
@@ -64,7 +65,7 @@ def get_visitor_count():
 if "visited" not in st.session_state:
     increment_visitor_count()
     st.session_state["visited"] = True
-    
+
 # Custom CSS for purple Calculate SGPA button
 st.markdown("""
     <style>
