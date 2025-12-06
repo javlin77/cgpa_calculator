@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import json, os, uuid
-from google.cloud import firestore_v1
 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
@@ -47,7 +45,6 @@ GRADE_SCHEMES = {
 
 # ---------- SIDEBAR ----------
 st.sidebar.header("Settings ⚙️")
-st.sidebar.markdown(f"👥 **Total Visitors:** {visitor_count}")
 
 scheme_name = st.sidebar.selectbox("Select Grade Scheme", list(GRADE_SCHEMES.keys()))
 grade_points_map = GRADE_SCHEMES[scheme_name]
