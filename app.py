@@ -12,21 +12,62 @@ st.set_page_config(
 
 # ---------------- FIREBASE INITIALIZATION ----------------
 if not firebase_admin._apps:
-    cred = credentials.Certificate(st.secrets["FIREBASE"])
-    firebase_admin.initialize_app(cred)
+    try:
+        # Debug: Check if secrets exist
+        if "FIREBASE" not in st.secrets:
+            st.error("❌ FIREBASE secrets not found!")
+            st.info("Please add Firebase credentials in Streamlit Secrets")
+            st.stop()
+        
+        # Convert to dictionary
+        firebase_config = {
+            "type": st.secrets["FIREBASE"]["type"],
+            "project_id": st.secrets["FIREBASE"]["project_id"],
+            "private_key_id": st.secrets["FIREBASE"]["private_key_id"],
+            "private_key": st.secrets["FIREBASE"]["private_key"],
+            "client_email": st.secrets["FIREBASE"]["client_email"],
+            "client_id": st.secrets["FIREBASE"]["client_id"],
+            "auth_uri": st.secrets["FIREBASE"]["auth_uri"],
+            "token_uri": st.secrets["FIREBASE"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["FIREBASE"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["FIREBASE"]["client_x509_cert_url"]
+        }
+        
+        cred = credentials.Certificate(firebase_config)
+        firebase_admin.initialize_app(cred)
+        
+    except KeyError as e:
+        st.error(f"❌ Missing Firebase credential: {e}")
+        st.info("Please check all required fields are in your secrets.toml")
+        st.stop()
+    except ValueError as e:
+        st.error(f"❌ Invalid Firebase credentials format")
+        st.info("Make sure your private_key uses \\n for line breaks (not actual newlines)")
+        st.code('private_key = "-----BEGIN PRIVATE KEY-----\\nYourKey...\\n-----END PRIVATE KEY-----\\n"')
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Firebase initialization error: {type(e).__name__}")
+        st.stop()
 
 db = firestore.client()
 
 # ---------------- VISITOR COUNTER FUNCTIONS ----------------
 def increment_visitor_count():
-    ref = db.collection("metrics").document("visitors")
-    ref.set({"count": firestore.Increment(1)}, merge=True)
+    try:
+        ref = db.collection("metrics").document("visitors")
+        ref.set({"count": firestore.Increment(1)}, merge=True)
+    except Exception as e:
+        st.error(f"Error incrementing visitor count: {e}")
 
 def get_visitor_count():
-    doc = db.collection("metrics").document("visitors").get()
-    if doc.exists:
-        return doc.to_dict().get("count", 0)
-    return 0
+    try:
+        doc = db.collection("metrics").document("visitors").get()
+        if doc.exists:
+            return doc.to_dict().get("count", 0)
+        return 0
+    except Exception as e:
+        st.error(f"Error getting visitor count: {e}")
+        return 0
 
 # ---------------- AUTO INCREMENT VISIT COUNTER ----------------
 if "visited" not in st.session_state:
@@ -209,4 +250,4 @@ with cgpa_tab:
         if st.button("🗑 Clear All Semesters", type="secondary"):
             st.session_state["records"] = []
             st.success("All data cleared.")
-            st.experimental_rerun()  # Use this for compatibility
+            st.rerun()
