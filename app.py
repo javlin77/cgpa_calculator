@@ -25,32 +25,24 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_key.json"
 db = firestore_v1.Client()
 
 
-# ---------- VISITOR COUNTER ----------
+# ---------- VISITOR COUNTER (SAFE VERSION) ----------
 visitors_ref = db.collection("metrics").document("visitors")
 
-# Count only once per Streamlit session
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
+# Increment only once per user session
+if "visited" not in st.session_state:
+    st.session_state["visited"] = True
 
     try:
-        transaction = db.transaction()
-
-        @firestore_v1.transactional
-        def increment_visitors(transaction, doc_ref):
-            snapshot = doc_ref.get(transaction=transaction)
-            current = snapshot.get("count") if snapshot.exists else 0
-            transaction.set(doc_ref, {"count": current + 1})
-
-        increment_visitors(transaction, visitors_ref)
-
+        visitors_ref.set({"count": firestore_v1.Increment(1)}, merge=True)
     except Exception as e:
         st.sidebar.error(f"❌ Firestore Error: {e}")
+
 
 # Read visitor count
 try:
     doc = visitors_ref.get()
     visitor_count = doc.to_dict().get("count", 0) if doc.exists else 0
-except:
+except Exception:
     visitor_count = 0
 
 
