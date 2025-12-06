@@ -1,12 +1,55 @@
 import streamlit as st
 import pandas as pd
+import firebase_admin
+from firebase_admin import credentials, firestore
 
+# ---------------- FIREBASE INITIALIZATION ----------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate(st.secrets["FIREBASE"])
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+# ---------------- VISITOR COUNTER FUNCTIONS ----------------
+def increment_visitor_count():
+    ref = db.collection("metrics").document("visitors")
+    ref.set({"count": firestore.Increment(1)}, merge=True)
+
+def get_visitor_count():
+    doc = db.collection("metrics").document("visitors").get()
+    if doc.exists:
+        return doc.to_dict().get("count", 0)
+    return 0
+
+# ---------------- CLICK COUNTER FUNCTIONS ----------------
+def increment_click_count():
+    ref = db.collection("metrics").document("clicks")
+    ref.set({"count": firestore.Increment(1)}, merge=True)
+
+def get_click_count():
+    doc = db.collection("metrics").document("clicks").get()
+    if doc.exists:
+        return doc.to_dict().get("count", 0)
+    return 0
+
+ 
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="SGPA & CGPA Calculator",
     page_icon="🎓",
     layout="wide",
 )
+st.set_page_config(
+    page_title="SGPA & CGPA Calculator",
+    page_icon="🎓",
+    layout="wide",
+)
+
+# ---------------- AUTO INCREMENT VISIT COUNTER ----------------
+if "visited" not in st.session_state:
+    increment_visitor_count()
+    st.session_state["visited"] = True
+
 
 # Custom CSS for purple Calculate SGPA button
 st.markdown("""
@@ -42,6 +85,8 @@ GRADE_SCHEMES = {
 
 # ---------- SIDEBAR SETTINGS ----------
 st.sidebar.header("Settings ⚙️")
+st.sidebar.markdown(f"👥 **Total Visitors:** {get_visitor_count()}")
+
 
 scheme_name = st.sidebar.selectbox(
     "Select Grade Scheme",
