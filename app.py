@@ -10,42 +10,6 @@ st.set_page_config(
     layout="wide",
 )
 
-# ---------- FIRESTORE INITIALIZATION ----------
-# Convert SecretValue objects → normal Python dict
-key_dict = {key: str(st.secrets["GOOGLE"][key]) for key in st.secrets["GOOGLE"]}
-
-# Write temporary service-account JSON
-with open("gcp_key.json", "w") as f:
-    json.dump(key_dict, f)
-
-# Point Google client to credentials file
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_key.json"
-
-# Firestore Client
-db = firestore_v1.Client()
-
-
-# ---------- VISITOR COUNTER (SAFE VERSION) ----------
-visitors_ref = db.collection("metrics").document("visitors")
-
-# Increment only once per user session
-if "visited" not in st.session_state:
-    st.session_state["visited"] = True
-
-    try:
-        visitors_ref.set({"count": firestore_v1.Increment(1)}, merge=True)
-    except Exception as e:
-        st.sidebar.error(f"❌ Firestore Error: {e}")
-
-
-# Read visitor count
-try:
-    doc = visitors_ref.get()
-    visitor_count = doc.to_dict().get("count", 0) if doc.exists else 0
-except Exception:
-    visitor_count = 0
-
-
 # ---------- CUSTOM BUTTON CSS ----------
 st.markdown("""
     <style>
