@@ -57,7 +57,8 @@ def increment_visitor_count():
         ref = db.collection("metrics").document("visitors")
         ref.set({"count": firestore.Increment(1)}, merge=True)
     except Exception as e:
-        st.error(f"Error incrementing visitor count: {e}")
+        # Silently fail - don't show error to users
+        pass
 
 def get_visitor_count():
     try:
@@ -66,8 +67,8 @@ def get_visitor_count():
             return doc.to_dict().get("count", 0)
         return 0
     except Exception as e:
-        st.error(f"Error getting visitor count: {e}")
-        return 0
+        # Return "N/A" if permissions error
+        return "N/A"
 
 # ---------------- AUTO INCREMENT VISIT COUNTER ----------------
 if "visited" not in st.session_state:
@@ -107,7 +108,8 @@ GRADE_SCHEMES = {
 
 # ---------- SIDEBAR SETTINGS ----------
 st.sidebar.header("Settings ⚙️")
-st.sidebar.markdown(f"👥 **Total Visitors:** {get_visitor_count()}")
+visitor_count = get_visitor_count()
+st.sidebar.markdown(f"👥 **Total Visitors:** {visitor_count}")
 
 scheme_name = st.sidebar.selectbox(
     "Select Grade Scheme",
