@@ -8,6 +8,20 @@ st.set_page_config(
     layout="wide",
 )
 
+# Custom CSS for purple Calculate SGPA button
+st.markdown("""
+    <style>
+        .calc-sgpa button {
+            background-color: #8A2BE2 !important;  /* Purple */
+            color: white !important;
+            border-radius: 8px !important;
+            padding: 0.6rem 1.2rem;
+            border: none !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------- HEADER ----------
 st.title("🎓 SGPA & CGPA Calculator")
 st.caption("Accurate CGPA using Σ(Credit × GradePoint) / Σ(Credits) across all semesters.")
 
@@ -83,7 +97,10 @@ with sgpa_tab:
             "total_points": credit * gp,
         })
 
-    if st.button("✅ Calculate SGPA", type="primary"):
+    st.markdown('<div class="calc-sgpa">', unsafe_allow_html=True)
+    clicked_sgpa = st.button("Calculate SGPA")
+    st.markdown("</div>", unsafe_allow_html=True)
+    if clicked_sgpa:
         df = pd.DataFrame(subjects_data)
 
         total_credits = df["credit"].sum()
@@ -164,6 +181,11 @@ with cgpa_tab:
             )
 
         st.markdown("---")
-        if st.button("🗑 Clear All Semesters", type="secondary"):
+        st.markdown('<div class="outline-button">', unsafe_allow_html=True)
+        clear_clicked = st.button("🗑 Clear All Semesters")
+        st.markdown("</div>", unsafe_allow_html=True)
+        if clear_clicked: 
             st.session_state["records"] = []
             st.success("All data cleared.")
+            st.rerun()
+
