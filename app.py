@@ -3,23 +3,16 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ---------- PAGE CONFIG (MUST BE FIRST) ----------
+# ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="SGPA & CGPA Calculator",
     page_icon="🎓",
     layout="wide",
 )
 
-# ---------------- FIREBASE INITIALIZATION ----------------
+# ---------- FIREBASE INITIALIZATION ----------
 if not firebase_admin._apps:
     try:
-        # Debug: Check if secrets exist
-        if "FIREBASE" not in st.secrets:
-            st.error("❌ FIREBASE secrets not found!")
-            st.info("Please add Firebase credentials in Streamlit Secrets")
-            st.stop()
-        
-        # Convert to dictionary
         firebase_config = {
             "type": st.secrets["FIREBASE"]["type"],
             "project_id": st.secrets["FIREBASE"]["project_id"],
@@ -32,49 +25,46 @@ if not firebase_admin._apps:
             "auth_provider_x509_cert_url": st.secrets["FIREBASE"]["auth_provider_x509_cert_url"],
             "client_x509_cert_url": st.secrets["FIREBASE"]["client_x509_cert_url"]
         }
-        
+
         cred = credentials.Certificate(firebase_config)
         firebase_admin.initialize_app(cred)
-        
-    except KeyError as e:
-        st.error(f"❌ Missing Firebase credential: {e}")
-        st.info("Please check all required fields are in your secrets.toml")
-        st.stop()
-    except ValueError as e:
-        st.error(f"❌ Invalid Firebase credentials format")
-        st.info("Make sure your private_key uses \\n for line breaks (not actual newlines)")
-        st.code('private_key = "-----BEGIN PRIVATE KEY-----\\nYourKey...\\n-----END PRIVATE KEY-----\\n"')
-        st.stop()
+
     except Exception as e:
-        st.error(f"❌ Firebase initialization error: {type(e).__name__}")
+        st.error("❌ Firebase initialization failed.")
         st.stop()
 
 db = firestore.client()
 
-# ---------------- VISITOR COUNTER FUNCTIONS ----------------
+# ---------- VISITOR COUNTER ----------
 def increment_visitor_count():
     try:
         ref = db.collection("metrics").document("visitors")
         ref.set({"count": firestore.Increment(1)}, merge=True)
-    except Exception as e:
-        # Silently fail - don't show error to users
-        pass
+    except:
+        pass  # Silent fail
+
 
 def get_visitor_count():
     try:
-        doc = db.collection("metrics").document("visitors").get()
-        if doc.exists:
-            return doc.to_dict().get("count", 0)
-        return 0
-    except Exception as e:
-        # Return "N/A" if permissions error
-        return "N/A"
+        ref = db.collection("metrics").document("visitors")
+        doc = ref.get()
 
-# ---------------- AUTO INCREMENT VISIT COUNTER ----------------
+        # Auto-create document if missing
+        if not doc.exists:
+            ref.set({"count": 0})
+            return 0
+
+        return doc.to_dict().get("count", 0)
+
+    except:
+        return 0  # Never return N/A
+
+
+# Count only once per session
 if "visited" not in st.session_state:
     increment_visitor_count()
     st.session_state["visited"] = True
-
+    
 # Custom CSS for purple Calculate SGPA button
 st.markdown("""
     <style>
