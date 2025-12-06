@@ -3,6 +3,13 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+# ---------- PAGE CONFIG (MUST BE FIRST) ----------
+st.set_page_config(
+    page_title="SGPA & CGPA Calculator",
+    page_icon="🎓",
+    layout="wide",
+)
+
 # ---------------- FIREBASE INITIALIZATION ----------------
 if not firebase_admin._apps:
     cred = credentials.Certificate(st.secrets["FIREBASE"])
@@ -21,35 +28,10 @@ def get_visitor_count():
         return doc.to_dict().get("count", 0)
     return 0
 
-# ---------------- CLICK COUNTER FUNCTIONS ----------------
-def increment_click_count():
-    ref = db.collection("metrics").document("clicks")
-    ref.set({"count": firestore.Increment(1)}, merge=True)
-
-def get_click_count():
-    doc = db.collection("metrics").document("clicks").get()
-    if doc.exists:
-        return doc.to_dict().get("count", 0)
-    return 0
-
- 
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="SGPA & CGPA Calculator",
-    page_icon="🎓",
-    layout="wide",
-)
-st.set_page_config(
-    page_title="SGPA & CGPA Calculator",
-    page_icon="🎓",
-    layout="wide",
-)
-
 # ---------------- AUTO INCREMENT VISIT COUNTER ----------------
 if "visited" not in st.session_state:
     increment_visitor_count()
     st.session_state["visited"] = True
-
 
 # Custom CSS for purple Calculate SGPA button
 st.markdown("""
@@ -63,7 +45,6 @@ st.markdown("""
         }
     </style>
 """, unsafe_allow_html=True)
-
 
 st.title("🎓 SGPA & CGPA Calculator")
 st.caption("Accurate CGPA using Σ(Credit × GradePoint) / Σ(Credits) across all semesters.")
@@ -86,7 +67,6 @@ GRADE_SCHEMES = {
 # ---------- SIDEBAR SETTINGS ----------
 st.sidebar.header("Settings ⚙️")
 st.sidebar.markdown(f"👥 **Total Visitors:** {get_visitor_count()}")
-
 
 scheme_name = st.sidebar.selectbox(
     "Select Grade Scheme",
@@ -145,8 +125,8 @@ with sgpa_tab:
     st.markdown('<div class="calc-sgpa">', unsafe_allow_html=True)
     clicked_sgpa = st.button("Calculate SGPA")
     st.markdown("</div>", unsafe_allow_html=True)
+    
     if clicked_sgpa:
-
         df = pd.DataFrame(subjects_data)
 
         total_credits = df["credit"].sum()
@@ -181,7 +161,6 @@ with sgpa_tab:
                 st.dataframe(df)
 
             st.info("Semester saved. You may add more Semester grades or go to the CGPA Calculator tab.")
-
 
 # -------------------------------------------------------------------
 # ------------------------ CGPA TAB ---------------------------------
@@ -230,4 +209,4 @@ with cgpa_tab:
         if st.button("🗑 Clear All Semesters", type="secondary"):
             st.session_state["records"] = []
             st.success("All data cleared.")
-            st.rerun()
+            st.experimental_rerun()  # Use this for compatibility
