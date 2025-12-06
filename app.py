@@ -10,19 +10,20 @@ st.set_page_config(
     layout="wide",
 )
 
-
 # ---------- FIRESTORE INITIALIZATION ----------
-# Load Google service account from Streamlit Secrets
-key_dict = st.secrets["GOOGLE"]
+# Convert SecretValue objects → normal Python dict
+key_dict = {key: str(st.secrets["GOOGLE"][key]) for key in st.secrets["GOOGLE"]}
 
-# Write JSON file temporarily (required by Firestore client)
+# Write temporary service-account JSON
 with open("gcp_key.json", "w") as f:
     json.dump(key_dict, f)
 
+# Point Google client to credentials file
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp_key.json"
 
-# Initialize Firestore client
+# Firestore Client
 db = firestore_v1.Client()
+
 
 # ---------- VISITOR COUNTER ----------
 visitors_ref = db.collection("metrics").document("visitors")
