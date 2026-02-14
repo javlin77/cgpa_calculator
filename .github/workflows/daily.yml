@@ -1,27 +1,26 @@
 name: Daily Auto Push
 
-permissions:
-  contents: write
 on:
   schedule:
-    - cron: '0 18 * * *'   # Runs daily at 6 PM UTC
+    - cron: '0 18 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   auto-commit:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Make daily change
+      - name: Make Commit
         run: |
-          echo "Updated on $(date)" >> auto_update.txt
-
-      - name: Commit
-        run: |
-          git config user.name "javlin77"
+          git config user.name "github-actions"
           git config user.email "javlin77@users.noreply.github.com"
-          git add .
-          git commit -m "Daily auto update"
+          git commit --allow-empty -m "Daily auto update"
           git push
