@@ -1,5 +1,7 @@
 name: Daily Auto Push
 
+permissions:
+  contents: write
 on:
   schedule:
     - cron: '0 18 * * *'   # Runs daily at 6 PM UTC
